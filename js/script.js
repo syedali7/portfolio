@@ -140,6 +140,66 @@ python make_call.py --to +91XXXXXXXXXX
 cd dashboard && npm install && npm run dev`,
     tags: ['Python', 'LiveKit', 'Deepgram', 'OpenAI', 'Groq', 'Silero VAD', 'SIP/PSTN', 'asyncio', 'Next.js'],
   },
+
+  'movie-recomm': {
+    icon: '🎬',
+    badge: 'ML · SVD → Embeddings',
+    title: 'Movie Recommendation Engine',
+    problem: 'Users exploring large content libraries (OTT, e-commerce, streaming) face decision fatigue. Manually curating suggestions is not scalable. A recommendation engine learns from collective user behaviour — ratings, interactions, watch history — to predict what each individual user will enjoy next, increasing engagement and retention.',
+    how: [
+      'Users and movies are represented as rows/columns in a sparse rating matrix (most cells are empty — users rate only a small fraction of movies).',
+      'SVD (Singular Value Decomposition) decomposes this matrix into latent factor vectors for users and items, capturing hidden taste patterns like "users who enjoy dark thrillers also tend to rate cerebral sci-fi highly".',
+      'Two recommendation strategies run in parallel: Co-occurrence (users who rated this movie ≥ 4.0 — what else did they love?) and Latent Factor Similarity (cosine similarity between SVD item vectors in embedding space).',
+      'Genre analytics run across all ratings to surface which genres have the highest/lowest average scores — useful for content acquisition decisions.',
+      'Model is evaluated using RMSE and MAE on a held-out 20% test set, and optionally via 5-fold cross-validation.',
+    ],
+    arch: [
+      { label: 'Algorithm',     value: 'SVD Matrix Factorization' },
+      { label: 'Framework',     value: 'scikit-surprise' },
+      { label: 'Similarity',    value: 'Cosine (sklearn)' },
+      { label: 'Data Format',   value: 'MovieLens CSV (userId, movieId, rating)' },
+      { label: 'Evaluation',    value: 'RMSE, MAE, 5-fold CV' },
+      { label: 'Model Storage', value: 'Pickle (.pkl)' },
+    ],
+    setup: `<span class="comment"># 1. Install dependencies</span>
+pip install -r requirements.txt   <span class="comment"># numpy&lt;2.0 pinned for surprise compat</span>
+
+<span class="comment"># 2. Generate sample data (140 movies, 300 users, ~15K ratings)</span>
+python generate_data.py
+
+<span class="comment"># 3. Train the SVD model</span>
+python train.py
+python train.py --factors 150 --epochs 30 --cross-val   <span class="comment"># tuned</span>
+
+<span class="comment"># 4. Get recommendations for any movie</span>
+python recommend.py "Toy Story"
+python recommend.py "The Dark Knight" --top 15
+python recommend.py "inception"`,
+    tags: ['Python', 'SVD', 'scikit-surprise', 'Pandas', 'NumPy', 'scikit-learn', 'MovieLens'],
+    roadmap: [
+      {
+        phase: 'Current — SVD (Batch)',
+        icon: '📦',
+        status: 'built',
+        desc: 'Matrix factorization on static dataset. Full retrain required for every new rating or movie. Works well for offline/periodic use cases.',
+        limitation: 'No continuous learning. Model goes stale between retraining runs. Cold start problem for new users and movies.',
+      },
+      {
+        phase: 'Next — Two-Tower Neural Model',
+        icon: '🧠',
+        status: 'next',
+        desc: 'Separate neural networks (towers) for users and items. User tower encodes interaction history → embedding. Item tower encodes metadata (title, genre, description) → embedding. Train once, then update user embeddings incrementally with each new rating.',
+        improvement: 'Handles new movies instantly (just encode metadata). Incremental user updates without full retraining. Captures non-linear patterns SVD cannot.',
+      },
+      {
+        phase: 'Production — Embeddings + Vector DB',
+        icon: '🚀',
+        status: 'future',
+        desc: 'Item embeddings stored in Pinecone or Qdrant. At query time: encode user history → ANN (Approximate Nearest Neighbour) search → top-K results in milliseconds. New movie added? Run through item tower → upsert into vector DB. No downtime, no retraining.',
+        improvement: 'Sub-10ms recommendations at any scale. Zero cold start for items. Real-time personalisation. Used by YouTube, Netflix, Spotify in production.',
+      },
+    ],
+  },
 };
 
 function buildModalContent(project) {
@@ -152,6 +212,32 @@ function buildModalContent(project) {
 
   const howItems = d.how.map(h => `<li>${h}</li>`).join('');
   const tags = d.tags.map(t => `<span class="tag">${t}</span>`).join('');
+
+  let roadmapHtml = '';
+  if (d.roadmap) {
+    const statusLabel = { built: 'Done', next: 'Next Step', future: 'Production Goal' };
+    const statusClass = { built: 'roadmap-built', next: 'roadmap-next', future: 'roadmap-future' };
+    const steps = d.roadmap.map(r => `
+      <div class="roadmap-step ${statusClass[r.status]}">
+        <div class="roadmap-step-header">
+          <span class="roadmap-icon">${r.icon}</span>
+          <div>
+            <span class="roadmap-phase">${r.phase}</span>
+            <span class="roadmap-status-badge">${statusLabel[r.status]}</span>
+          </div>
+        </div>
+        <p class="roadmap-desc">${r.desc}</p>
+        ${r.limitation ? `<p class="roadmap-note roadmap-limit">⚠ Limitation: ${r.limitation}</p>` : ''}
+        ${r.improvement ? `<p class="roadmap-note roadmap-improve">✦ Why better: ${r.improvement}</p>` : ''}
+      </div>
+    `).join('');
+    roadmapHtml = `
+      <div class="modal-section">
+        <h4 class="modal-section-title">Evolution Roadmap — From SVD to Production</h4>
+        <div class="roadmap-steps">${steps}</div>
+      </div>
+    `;
+  }
 
   return `
     <div class="modal-header-icon">${d.icon}</div>
@@ -182,6 +268,8 @@ function buildModalContent(project) {
       <h4 class="modal-section-title">Setup</h4>
       <div class="modal-code-block">${d.setup}</div>
     </div>
+
+    ${roadmapHtml}
   `;
 }
 
